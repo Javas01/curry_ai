@@ -163,7 +163,7 @@ export default function Home() {
                 <div className="flex justify-between items-center">
                   <span className="text-blue-100">Points:</span>
                   <span className="text-2xl font-bold text-green-300">
-                    {nextPrediction.predicted_pts}
+                    {nextPrediction.predicted_pts.toFixed(2)}
                   </span>
                 </div>
                 {nextGame && (
