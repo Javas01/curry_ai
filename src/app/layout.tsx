@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Curry Predictor - AI-powered Stephen Curry Performance Predictions",
+  title: "AI Chef Curry",
   description: "Predict Stephen Curry's performance using advanced AI models"
 };
 

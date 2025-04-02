@@ -81,8 +81,7 @@ export default function Home() {
         const { data: pastData, error: pastError } = await supabase
           .from("predictions")
           .select("*")
-          .order("input_game_date", { ascending: false })
-          .limit(4);
+          .order("input_game_date", { ascending: false });
 
         if (pastError) throw pastError;
 
@@ -104,7 +103,7 @@ export default function Home() {
           throw new Error(scheduleData.error || "Failed to fetch schedule");
         }
 
-        setPastPredictions(pastData?.slice(1, 4) || []);
+        setPastPredictions(pastData?.slice(1) || []);
         setNextPrediction(nextData);
         setNextGame(scheduleData.nextGame);
       } catch (err) {
@@ -202,7 +201,7 @@ export default function Home() {
             <h2 className="text-2xl font-bold mb-4 text-white">
               Past Predictions
             </h2>
-            <div className="space-y-4">
+            <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
               {pastPredictions.map((prediction, index) => (
                 <div key={index} className="border-b border-white/30 pb-4">
                   <div className="flex justify-between items-center mb-2">
