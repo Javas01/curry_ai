@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getNextWarriorsGame } from "@/app/utils/scraper";
+import { getNextWarriorsGame, updatePredictions } from "@/app/utils/scraper";
 
 // Force this to run on the server
 export const runtime = "nodejs";
@@ -13,6 +13,7 @@ export async function GET() {
   try {
     console.log("API Route: Starting to fetch Warriors schedule...");
     const nextGame = await getNextWarriorsGame();
+    await updatePredictions();
     console.log("API Route: Received next game data:", nextGame);
     console.log("=== API ROUTE END ===");
     return NextResponse.json({ nextGame });

@@ -1,3 +1,4 @@
+import { supabase } from "@/lib/supabase";
 import { load } from "cheerio";
 
 interface Game {
@@ -20,6 +21,67 @@ const fetchConfig = {
     Pragma: "no-cache"
   }
 };
+
+export async function updatePredictions() {
+  try {
+    const { data: lastPrediction, error } = await supabase
+      .from("predictions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error("Error fetching last prediction:", error);
+    }
+
+    if (!lastPrediction) {
+      console.error("No last prediction found");
+      return;
+    }
+
+    const predictionGameDate = lastPrediction[0].game_date;
+
+    const response = await fetch(
+      "https://www.espn.com/nba/player/_/id/3975/stephen-curry",
+      fetchConfig
+    );
+
+    const data = await response.text();
+
+    const $ = load(data);
+
+    const rows = $("table tbody tr");
+    let points = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = $(rows[i]);
+      const dateText = row.find("td:nth-child(1)").text().trim();
+      const gameDate = new Date(dateText + " 2025");
+      if (isNaN(gameDate.getTime())) {
+        continue;
+      }
+      const formattedGameDate = gameDate.toISOString().split("T")[0];
+
+      if (formattedGameDate === predictionGameDate) {
+        points = parseInt(row.find("td:nth-child(14)").text().trim());
+      }
+    }
+    if (points === 0) {
+      console.error("No points found for the prediction date");
+      return;
+    }
+    await supabase
+      .from("predictions")
+      .update({
+        actual_pts: points
+      })
+      .eq("player_id", lastPrediction[0].player_id)
+      .eq("input_game_date", lastPrediction[0].input_game_date);
+
+    console.log("Scraper: Points:", points);
+  } catch (error) {
+    console.error("Error fetching last prediction:", error);
+  }
+}
 
 export async function getNextWarriorsGame(): Promise<Game | null> {
   console.log("=== SCRAPER START ===");
@@ -59,12 +121,20 @@ export async function getNextWarriorsGame(): Promise<Game | null> {
     const currentDate = new Date();
     console.log("Scraper: Current date:", currentDate);
     let nextGame: Game | null = null;
+    let nextGameAfterLastPrediction: Game | null = null;
+
+    // get the last prediction with null game_date
+    const { data: lastPrediction, error } = await supabase
+      .from("predictions")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(1);
 
     const rows = $("table tbody tr");
     console.log("Scraper: Found table rows:", rows.length);
 
-    rows.each((_, element) => {
-      const row = $(element);
+    for (let i = 0; i < rows.length; i++) {
+      const row = $(rows[i]);
       const dateText = row.find("td:nth-child(1)").text().trim();
       const opponentCell = row.find("td:nth-child(2)");
       const opponent = opponentCell.text().trim();
@@ -87,8 +157,22 @@ export async function getNextWarriorsGame(): Promise<Game | null> {
         isNaN(gameDate.getTime())
       );
 
-      // Check if the game is in the future and has a ticket link
+      if (
+        lastPrediction &&
+        !isNaN(gameDate.getTime()) &&
+        gameDate > lastPrediction[0].game_date
+      ) {
+        const isHome = !opponentCell.text().includes("@");
+
+        nextGameAfterLastPrediction = {
+          date: gameDate.toDateString(),
+          opponent: opponent.replace("@ ", "").replace("vs ", ""), // Clean up opponent name
+          isHome: isHome,
+          timestamp: gameDate.toISOString()
+        };
+      }
       if (!isNaN(gameDate.getTime()) && hasTicketLink) {
+        // Check if the game is in the future and has a ticket link
         // Determine if it's a home game (no @ symbol in the opponent text)
         const isHome = !opponentCell.text().includes("@");
 
@@ -99,9 +183,9 @@ export async function getNextWarriorsGame(): Promise<Game | null> {
           timestamp: gameDate.toISOString()
         };
         console.log("Scraper: Found next game:", nextGame);
-        return false; // Break the loop
+        break; // Break the loop
       }
-    });
+    }
 
     if (!nextGame) {
       console.log("Scraper: No next game found in schedule");
@@ -110,6 +194,27 @@ export async function getNextWarriorsGame(): Promise<Game | null> {
         "Scraper: HTML structure:",
         $("table").html()?.substring(0, 200)
       );
+    }
+
+    if (nextGameAfterLastPrediction) {
+      console.log("Scraper: Last prediction:", lastPrediction);
+
+      if (error) {
+        console.error("Error fetching last prediction:", error);
+      }
+
+      if (lastPrediction && lastPrediction[0].game_date === null) {
+        console.log("Scraper: Updating prediction with next game:", nextGame);
+        // update supabase with the next game
+
+        await supabase
+          .from("predictions")
+          .update({
+            game_date: new Date(nextGameAfterLastPrediction.date + " 2025")
+          })
+          .eq("player_id", lastPrediction[0].player_id)
+          .eq("input_game_date", lastPrediction[0].input_game_date);
+      }
     }
 
     console.log("=== SCRAPER END ===");
@@ -172,7 +277,3 @@ export async function getLastGames(count: number = 5): Promise<Game[]> {
     );
   }
 }
-
-// Example usage:
-// const nextGame = await getNextWarriorsGame();
-// const lastFiveGames = await getLastGames(5);
